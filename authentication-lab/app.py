@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask import session as login_session
 import pyrebase
 
-firebaseConfig = {
+config = {
   'apiKey': "AIzaSyCfTAH8QoHIJ1MHaGnnWhD0rLD1FOLlW2g",
   'authDomain': "cs-is-lit.firebaseapp.com",
   "projectId": "cs-is-lit",
@@ -10,11 +10,11 @@ firebaseConfig = {
   "messagingSenderId": "1020758485639",
   "appId": "1:1020758485639:web:94f84ed24069bfa7b6a622",
   "measurementId": "G-N1QPDZPL7P",
-  "databaseURL": ""
+  "databaseURL": "https://cs-is-lit-default-rtdb.europe-west1.firebasedatabase.app/"
 }
-
-firebase = pyrebase.initialize_app(firebaseConfig)
-auth = firebase.auth()
+firebase = pyrebase.initialize_app(config)
+auth=firebase.auth()
+db =firebase.database()
 
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -23,45 +23,77 @@ app.config['SECRET_KEY'] = 'super-secret-key'
 
 @app.route('/', methods=['GET', 'POST'])
 def signin():
-    error=''
-    if request.method=='POST':
-        email=request.form['email']
-        password=request.form['password']
+    error = ""
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
         try:
-            login_session['user']=auth.sign_in_with_email_and_password(email,password)
+            login_session['user'] = auth.sign_in_with_email_and_password(email, password)
+            print("HELLO, WORKED")
             return redirect(url_for('add_tweet'))
-        except:
-            error="authentiaction failed"
-            return render_template("signin.html")
-    else: 
-        return render_template('signin.html')
-    
+        except Exception as e:
+            error = "Authentication failed"
+            print(e)
+    return render_template("signin.html")
+
 
 
 @app.route('/signup', methods=['GET', 'POST'])
-def signup():
-    error=''
-    if request.method=='POST':
-        email=request.form['email']
-        password=request.form['password']
-        if len(password)>=6:
-            try:
-                login_session['user']=auth.create_user_with_email_and_password(email,password)
-                return redirect(url_for('add_tweet'))
-            except:
-                error="authentiaction failed"
-                return render_template("signup.html")
-        else:
-            return render_template("signup.html")
-    else: 
-        return render_template('signup.html')
+def signup(): 
+    error = ""
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        username = request.form['username']
+        bio = request.form['bio']
+        full_name = request.form['fullname']
+        
+        try:
+            login_session['user'] = auth.create_user_with_email_and_password(email, password)
+            UID = login_session['user']['localId']
+            user = {"name": full_name, "email": email, "username" : username, "bio" : bio}
+            db.child("Users").child(UID).update(user)
+            return redirect(url_for('add_tweet'))
+
+        except:
+            error = "Authentication failed"
+
+    return render_template("signup.html")
 
 
+
+@app.route('/signout')
+def signout():
+    auth.current_user = None
+    login_session['user'] = None
+    return redirect(url_for('signin'))
 
 @app.route('/add_tweet', methods=['GET', 'POST'])
 def add_tweet():
+    if request.method == 'POST':
+        title = request.form['title']
+        text = request.form['text']
+        try:
+            UID = login_session['user']['localId']
+            tweet = {'title':title, 'text':text, 'UID': UID}
+            db.child("Tweets").push(tweet)
+            return redirect(url_for('all_tweets'))
+        except:
+            error = "your dumb"
+            
+
     return render_template("add_tweet.html")
 
 
-if __name__ == '__main__':
-    app.run(debug=True)
+@app.route('/all_tweets')
+def all_tweets():
+    
+    UID = login_session['user']['localId']
+
+    name = db.child("Tweets").get().val()
+
+
+    return render_template('tweet.html', tweet123 = name)
+
+
+if__name__== '_main_': app.run(debug=True)
